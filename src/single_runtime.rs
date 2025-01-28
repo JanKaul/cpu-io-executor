@@ -53,7 +53,7 @@ async fn main() {
         set.spawn({
             let object_store = object_store.clone();
             async move {
-                stream(object_store)
+                execution_stream(object_store)
                     .await
                     .try_collect::<Vec<Vec<_>>>()
                     .await
@@ -65,7 +65,7 @@ async fn main() {
     set.join_all().await;
 }
 
-async fn stream(
+async fn execution_stream(
     object_store: Arc<dyn ObjectStore>,
 ) -> Pin<Box<dyn Stream<Item = Result<Vec<u8>, object_store::Error>> + Send>> {
     Box::pin(
