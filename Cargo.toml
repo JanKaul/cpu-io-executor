@@ -1,0 +1,16 @@
+[package]
+name = "cpu-io-executor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytes = "1.9.0"
+futures = "0.3.31"
+object_store = { version = "0.11.2", features = ["aws"] }
+testcontainers = "0.23"
+testcontainers-modules = { version = "0.11", features = ["localstack"] }
+tokio = { version = "1.43.0", features = ["rt-multi-thread", "macros"] }
+
+[[bin]]
+name = "single_runtime"
+path = "src/single_runtime.rs"
