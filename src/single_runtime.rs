@@ -12,10 +12,11 @@ mod localstack;
 static CPU_TIME: u64 = 2;
 static N_FILES: usize = 2;
 static OBJECT_KEY: &str = "test";
+static N_IO_THREADS: usize = 2;
 
 #[tokio::main]
 async fn main() {
-    let num_cpus = std::thread::available_parallelism().unwrap().get();
+    let num_threads = std::thread::available_parallelism().unwrap().get();
 
     // Start localstack container
     let localstack = localstack::localstack_container().await;
@@ -49,7 +50,7 @@ async fn main() {
     let mut set = JoinSet::new();
 
     // Leave two cores unoccupied
-    for _ in 0..(num_cpus - 2) {
+    for _ in 0..(num_threads - N_IO_THREADS) {
         set.spawn({
             let object_store = object_store.clone();
             async move {

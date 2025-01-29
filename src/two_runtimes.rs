@@ -13,10 +13,11 @@ mod localstack;
 static CPU_TIME: u64 = 2;
 static N_FILES: usize = 2;
 static OBJECT_KEY: &str = "test";
+static N_IO_THREADS: usize = 2;
 
-#[tokio::main]
+#[tokio::main(worker_threads = 2)]
 async fn main() {
-    let num_cpus = std::thread::available_parallelism().unwrap().get();
+    let num_threads = std::thread::available_parallelism().unwrap().get();
 
     // Start localstack container
     let localstack = localstack::localstack_container().await;
@@ -47,14 +48,16 @@ async fn main() {
         .await
         .unwrap();
 
-    let dedicated_executor = DedicatedExecutor::builder().build();
+    let dedicated_executor = DedicatedExecutor::builder()
+        .with_worker_threads(num_threads - N_IO_THREADS)
+        .build();
 
     let io_object_store = dedicated_executor.wrap_object_store_for_io(object_store);
 
     let mut handles = Vec::new();
 
     // Leave two cores unoccupied
-    for _ in 0..(num_cpus - 2) {
+    for _ in 0..(num_threads - N_IO_THREADS) {
         let handle = dedicated_executor
             .spawn({
                 let io_object_store = io_object_store.clone();
