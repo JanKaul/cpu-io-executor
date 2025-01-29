@@ -1,12 +1,13 @@
 use std::{iter, pin::Pin, sync::Arc, time::Duration};
 
+use dedicated_executor::DedicatedExecutor;
 use futures::{
     stream::{self, BoxStream},
     Stream, StreamExt, TryStreamExt,
 };
 use object_store::{aws::AmazonS3Builder, ObjectStore, PutPayload, Result};
-use tokio::task::JoinSet;
 
+mod dedicated_executor;
 mod localstack;
 
 static CPU_TIME: u64 = 2;
@@ -46,22 +47,36 @@ async fn main() {
         .await
         .unwrap();
 
-    let mut set = JoinSet::new();
+    let dedicated_executor = DedicatedExecutor::builder().build();
+
+    let io_object_store = dedicated_executor.wrap_object_store_for_io(object_store);
+
+    let mut handles = Vec::new();
 
     // Leave two cores unoccupied
     for _ in 0..(num_cpus - 2) {
-        set.spawn({
-            let object_store = object_store.clone();
-            async move {
-                execution_stream(object_store)
-                    .try_collect::<Vec<Vec<_>>>()
-                    .await
-                    .unwrap();
-            }
-        });
+        let handle = dedicated_executor
+            .spawn({
+                let io_object_store = io_object_store.clone();
+                async move { execution_stream(io_object_store) }
+            })
+            .await
+            .unwrap();
+        handles.push(handle);
     }
 
-    set.join_all().await;
+    for handle in handles {
+        dedicated_executor
+            .run_cpu_stream(handle, |err| object_store::Error::Generic {
+                store: "s3",
+                source: Box::new(err),
+            })
+            .try_collect::<Vec<Vec<_>>>()
+            .await
+            .unwrap();
+    }
+
+    dedicated_executor.join().await;
 }
 
 fn execution_stream(
