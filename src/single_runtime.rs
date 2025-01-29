@@ -67,11 +67,7 @@ async fn main() {
 fn execution_stream(
     object_store: Arc<dyn ObjectStore>,
 ) -> Pin<Box<dyn Stream<Item = Result<Vec<u8>, object_store::Error>> + Send>> {
-    Box::pin(
-        io_stream(object_store)
-            .and_then(|x| async move { cpu_work(x) })
-            .and_then(|x| async move { cpu_work(x) }),
-    )
+    Box::pin(io_stream(object_store).map_ok(cpu_work).map_ok(cpu_work))
 }
 
 fn io_stream(
@@ -91,7 +87,7 @@ fn io_stream(
     )
 }
 
-fn cpu_work(bytes: Vec<u8>) -> Result<Vec<u8>, object_store::Error> {
+fn cpu_work(bytes: Vec<u8>) -> Vec<u8> {
     std::thread::sleep(Duration::from_secs(CPU_TIME));
-    Ok(bytes)
+    bytes
 }
