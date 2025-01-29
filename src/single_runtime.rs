@@ -5,12 +5,12 @@ use futures::{
     Stream, StreamExt, TryStreamExt,
 };
 use object_store::{aws::AmazonS3Builder, ObjectStore, PutPayload, Result};
-use testcontainers::{core::ExecCommand, runners::AsyncRunner, ContainerAsync, ImageExt};
-use testcontainers_modules::localstack::LocalStack;
 use tokio::task::JoinSet;
 
+mod localstack;
+
 static CPU_TIME: u64 = 2;
-static N_GET: usize = 2;
+static N_FILES: usize = 2;
 static OBJECT_KEY: &str = "test";
 
 #[tokio::main]
@@ -18,7 +18,7 @@ async fn main() {
     let num_cpus = std::thread::available_parallelism().unwrap().get();
 
     // Start localstack container
-    let localstack = localstack_container().await;
+    let localstack = localstack::localstack_container().await;
     let localstack_host = localstack.get_host().await.unwrap();
     let localstack_port = localstack.get_host_port_ipv4(4566).await.unwrap();
 
@@ -54,7 +54,6 @@ async fn main() {
             let object_store = object_store.clone();
             async move {
                 execution_stream(object_store)
-                    .await
                     .try_collect::<Vec<Vec<_>>>()
                     .await
                     .unwrap();
@@ -65,59 +64,34 @@ async fn main() {
     set.join_all().await;
 }
 
-async fn execution_stream(
+fn execution_stream(
     object_store: Arc<dyn ObjectStore>,
 ) -> Pin<Box<dyn Stream<Item = Result<Vec<u8>, object_store::Error>> + Send>> {
     Box::pin(
-        stream::iter(iter::repeat_n(object_store, N_GET))
-            .then(io_stream)
-            .flatten()
-            .and_then(cpu_work)
-            .and_then(cpu_work),
+        io_stream(object_store)
+            .and_then(|x| async move { cpu_work(x) })
+            .and_then(|x| async move { cpu_work(x) }),
     )
 }
 
-async fn io_stream(
+fn io_stream(
     object_store: Arc<dyn ObjectStore>,
 ) -> BoxStream<'static, Result<Vec<u8>, object_store::Error>> {
     Box::pin(
-        object_store
-            .get(&OBJECT_KEY.into())
-            .await
-            .unwrap()
-            .into_stream()
-            .map_ok(|x| Vec::from(x)),
+        stream::iter(iter::repeat_n(object_store, N_FILES))
+            .then(|object_store| async move {
+                object_store
+                    .get(&OBJECT_KEY.into())
+                    .await
+                    .unwrap()
+                    .into_stream()
+                    .map_ok(|x| Vec::from(x))
+            })
+            .flatten(),
     )
 }
 
-async fn cpu_work(bytes: Vec<u8>) -> Result<Vec<u8>, object_store::Error> {
+fn cpu_work(bytes: Vec<u8>) -> Result<Vec<u8>, object_store::Error> {
     std::thread::sleep(Duration::from_secs(CPU_TIME));
     Ok(bytes)
-}
-
-async fn localstack_container() -> ContainerAsync<LocalStack> {
-    let localstack = LocalStack::default()
-        .with_env_var("SERVICES", "s3")
-        .with_env_var("AWS_ACCESS_KEY_ID", "user")
-        .with_env_var("AWS_SECRET_ACCESS_KEY", "password")
-        .start()
-        .await
-        .unwrap();
-
-    let command = localstack
-        .exec(ExecCommand::new(vec![
-            "awslocal",
-            "s3api",
-            "create-bucket",
-            "--bucket",
-            "warehouse",
-        ]))
-        .await
-        .unwrap();
-
-    while command.exit_code().await.unwrap().is_none() {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-
-    localstack
 }
