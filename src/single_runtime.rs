@@ -14,7 +14,7 @@ use tokio::task::JoinSet;
 mod localstack;
 
 static CPU_TIME: u64 = 2;
-static N_FILES: usize = 2;
+static N_FILES: usize = 4;
 static MEGABYTE: usize = 1048576;
 static FILE_SIZE: usize = 8 * MEGABYTE;
 static OBJECT_KEY: &str = "test";
