@@ -13,6 +13,8 @@ testcontainers = "0.23"
 testcontainers-modules = { version = "0.11", features = ["localstack"] }
 tokio = { version = "1.43.0", features = ["rt-multi-thread", "macros"] }
 tokio-stream = "0.1.17"
+rayon = "1.10.0"
+async-task = "4.7.1"
 
 [[bin]]
 name = "single_runtime"
@@ -21,3 +23,7 @@ path = "src/single_runtime.rs"
 [[bin]]
 name = "two_runtimes"
 path = "src/two_runtimes.rs"
+
+[[bin]]
+name = "custom_runtime"
+path = "src/custom_runtime.rs"
